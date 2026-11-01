@@ -5,7 +5,7 @@ class Tokenizer:
         self.itos_map = {i: ch for i, ch in enumerate(self.vocab)}
 
         print(f"Input has this many characters: {len(text):_}")
-        print(f"Vocab: {''.join(self.vocab)}")
+        print(f"Vocab: {''.join(self.vocab)!r}")
         print(f"Vocab Size: {len(self.vocab)}")
 
     def encode(self, s: str) -> list[int]:
@@ -15,4 +15,4 @@ class Tokenizer:
         return "".join([self.itos_map[i] for i in l])
 
     def extract_vocab(self, text: str) -> list[str]:
-        return sorted(set(text))
+        return sorted(set(text), reverse=True)
