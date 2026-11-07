@@ -2,6 +2,8 @@ import torch
 
 from tokenizer import Tokenizer
 
+torch.manual_seed(1337)  # type: ignore
+
 
 def main():
     train()
@@ -33,7 +35,6 @@ def train():
     # for t in range(block_size):
     #     print(f"For {x[: t + 1]} target is {y[t]}")
 
-    torch.manual_seed(seed=1337)
     block_size = 8  # max context_length for prediction
     batch_size = 4  # independent sequences to process parallelly in one pass
     xb, yb = get_batch(train_data, block_size=block_size, batch_size=batch_size)
@@ -49,6 +50,7 @@ def get_batch(
     data: torch.Tensor, block_size: int, batch_size: int
 ) -> tuple[torch.Tensor, torch.Tensor]:
     ix = torch.randint(low=0, high=len(data) - block_size, size=(batch_size,))
+    print(f"Starting indeces for current batch: {ix}")
     x = torch.stack([data[i : i + block_size] for i in ix])
     y = torch.stack([data[i + 1 : i + block_size + 1] for i in ix])
     return x, y
