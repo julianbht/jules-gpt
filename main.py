@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+from torch.nn import functional as F
 
 from tokenizer import Tokenizer
 
@@ -47,9 +48,10 @@ def train():
     print(f"  {yb}")
 
     m = BigramLM(len(tokenizer.vocab))
-    out = m(xb, yb)  # calls m.forward()
+    logits, loss = m(xb, yb)  # calls m.forward()
     print("Bigram Model:")
-    print(f"  {out.shape}")
+    print(f"  Logits shape: {logits.shape}")
+    print(f"  Loss: {loss}")
 
 
 def get_batch(
@@ -71,15 +73,27 @@ class BigramLM(nn.Module):
         # one entry i,j represents how likely token j follows token i
         self.token_embedding_table = nn.Embedding(vocab_size, vocab_size)
 
-    def forward(self, idx: torch.Tensor, targets: torch.Tensor):
+    def forward(
+        self, idcs: torch.Tensor, targets: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         # integer array indexing
         # each token is within vocab_size
         # for each token, pick out its embedding table row
         # that row is the embedding
-        logits = self.token_embedding_table(idx)
-        # dim = block_size x batch_size x vocab_size
+        # dim = block_size x batch_size x vocab_size (B,T,C)
         # for each char in each batch the logits for all possible following chars
-        return logits
+        logits = self.token_embedding_table(idcs)
+        # compute negative log likelihood loss
+        # goal: return logits and loss
+        # isuse: pytorch expects dimensions differently
+        # so we need to juggle them around
+        B, T, C = logits.shape
+        # flatten logits and targets
+        logits = logits.view(B * T, C)
+        targets = targets.view(B * T)
+        # result: blocks and batches concatenated into one
+        loss = F.cross_entropy(logits, targets)
+        return logits, loss
 
 
 if __name__ == "__main__":
