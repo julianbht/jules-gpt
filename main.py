@@ -1,4 +1,5 @@
 import torch
+from torch import nn
 
 from tokenizer import Tokenizer
 
@@ -45,6 +46,11 @@ def train():
     print(f"  {yb.size()}")
     print(f"  {yb}")
 
+    m = BigramLM(len(tokenizer.vocab))
+    out = m(xb, yb)  # calls m.forward()
+    print("Bigram Model:")
+    print(f"  {out.shape}")
+
 
 def get_batch(
     data: torch.Tensor, block_size: int, batch_size: int
@@ -54,6 +60,26 @@ def get_batch(
     x = torch.stack([data[i : i + block_size] for i in ix])
     y = torch.stack([data[i + 1 : i + block_size + 1] for i in ix])
     return x, y
+
+
+class BigramLM(nn.Module):
+    def __init__(self, vocab_size: int):
+        super().__init__()
+        # lookup table of embeddings
+        # dim = vocab_size x vocab_size
+        # row i is the embedding of token i. it has vocab_size numbers
+        # one entry i,j represents how likely token j follows token i
+        self.token_embedding_table = nn.Embedding(vocab_size, vocab_size)
+
+    def forward(self, idx: torch.Tensor, targets: torch.Tensor):
+        # integer array indexing
+        # each token is within vocab_size
+        # for each token, pick out its embedding table row
+        # that row is the embedding
+        logits = self.token_embedding_table(idx)
+        # dim = block_size x batch_size x vocab_size
+        # for each char in each batch the logits for all possible following chars
+        return logits
 
 
 if __name__ == "__main__":
