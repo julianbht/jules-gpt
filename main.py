@@ -5,6 +5,16 @@ from torch.nn import functional as F
 from tokenizer import Tokenizer
 
 torch.manual_seed(1337)  # type: ignore
+device = "cuda" if torch.cuda.is_available() else "cpu"
+# torch.set_printoptions(profile="full", linewidth=150)  # type: ignore
+
+# hyperparameters
+block_size = 8  # (dim C) max context_length for prediction
+batch_size = 4  # (dim B) independent sequences to process parallelly in one pass
+max_iters = 3000  # training iterations
+eval_interval = 300
+learning_rate = 1e-2
+eval_iters = 200
 
 
 def main():
@@ -31,21 +41,22 @@ def train():
     print(f"  Test: 1 - {len(train_data):_}")
     print(f"  Val: {len(train_data) + 1:_} - {len(data):_}")
 
-    block_size = 8  # max context_length for prediction
     x = train_data[:block_size]
     y = train_data[1 : block_size + 1]  # offset by one
-    # for t in range(block_size):
-    #     print(f"For {x[: t + 1]} target is {y[t]}")
 
-    block_size = 8  # max context_length for prediction
-    batch_size = 4  # independent sequences to process parallelly in one pass
     xb, yb = get_batch(train_data, block_size=block_size, batch_size=batch_size)
     print("Example input:")
     print(f"  {xb.size()}")
     print(f"  {xb}")
+    # print("Decoded input:")
+    # for row in xb.tolist():
+    #     print(f"  {tokenizer.decode(row)!r}")
     print("Example target:")
     print(f"  {yb.size()}")
     print(f"  {yb}")
+    # print("Decoded target:")
+    # for row in yb.tolist():
+    #     print(f"  {tokenizer.decode(row)!r}")
 
     m = BigramLM(len(tokenizer.vocab))
     logits, loss = m(xb, yb)  # calls m.forward()
@@ -53,30 +64,31 @@ def train():
     print(f"  Logits shape: {logits.shape}")
     print(f"  Loss: {loss}")
 
-    start = torch.zeros(
-        size=(1, 1), dtype=torch.long
-    )  # need to make this a 64, because for us 64 is \n
-    tokens = m.generate(idcs=start, max_new_tokens=100)[0]
-    print(tokenizer.decode(tokens.tolist()))
+    # print("Example generation before train:")
+    # start = torch.zeros(
+    #     size=(1, 1), dtype=torch.long
+    # )  # need to make this a 64, because for us 64 is \n
+    # tokens = m.generate(idcs=start, max_new_tokens=100)[0]
+    # print(f"  {tokenizer.decode(tokens.tolist())!r}")
+    m.print_embeddings()
 
     # -- try to do an actual training loop --
-    optimizer = torch.optim.AdamW(m.parameters(), lr=1e-3)
-    batch_size = 32
-    for steps in range(10000):
-        xb, xy = get_batch(
-            data=train_data, batch_size=batch_size, block_size=block_size
-        )
-        logits, loss = m(xb, xy)
-        optimizer.zero_grad(set_to_none=True)
-        loss.backward()
-        optimizer.step()
-        # print(loss.item())
+    # optimizer = torch.optim.AdamW(m.parameters(), lr=learning_rate)
+    # for steps in range(max_iters):
+    #     xb, xy = get_batch(
+    #         data=train_data, batch_size=batch_size, block_size=block_size
+    #     )
+    #     logits, loss = m(xb, xy)
+    #     optimizer.zero_grad(set_to_none=True)
+    #     loss.backward()
+    #     optimizer.step()
+    #     # print(loss.item())
 
-    start = torch.zeros(
-        size=(1, 1), dtype=torch.long
-    )  # need to make this a 64, because for us 64 is \n
-    tokens = m.generate(idcs=start, max_new_tokens=1000)[0]
-    print(tokenizer.decode(tokens.tolist()))
+    # start = torch.zeros(
+    #     size=(1, 1), dtype=torch.long
+    # )  # need to make this a 64, because for us 64 is \n
+    # tokens = m.generate(idcs=start, max_new_tokens=1)[0]
+    # print(tokenizer.decode(tokens.tolist()))
 
 
 def get_batch(
@@ -96,10 +108,15 @@ class BigramLM(nn.Module):
         # dim = vocab_size x vocab_size
         # row i is the embedding of token i. it has vocab_size numbers
         # one entry i,j represents how likely token j follows token i
-        self.token_embedding_table = nn.Embedding(vocab_size, vocab_size)
+        self.token_embedding_table: torch.nn.Embedding = nn.Embedding(
+            vocab_size, vocab_size
+        )
+        # print("Embedding table:")
+        # print(f"  {self.token_embedding_table}")
+        # print(f"  {self.token_embedding_table.weight.detach()}")
 
     def forward(
-        self, idcs: torch.Tensor, targets: torch.Tensor | None = None
+        self, xb: torch.Tensor, xy: torch.Tensor | None = None
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         # integer array indexing
         # each token is within vocab_size
@@ -107,8 +124,9 @@ class BigramLM(nn.Module):
         # that row is the embedding
         # dim = batch_size x block_size x vocab_size (B,T,C)
         # for each char in each batch the logits for all possible following chars
-        logits = self.token_embedding_table(idcs)
-        if targets is None:
+        logits = self.token_embedding_table(xb)
+        # print(f"Logits: {logits}")
+        if xy is None:
             loss = None
         else:
             # compute negative log likelihood loss
@@ -118,10 +136,14 @@ class BigramLM(nn.Module):
             # so we need to juggle them around
             # flatten logits and targets
             logits = logits.view(B * T, C)
-            targets = targets.view(B * T)
+            xy = xy.view(B * T)
             # result: blocks and batches concatenated into one
-            loss = F.cross_entropy(logits, targets)
+            loss = F.cross_entropy(logits, xy)
         return logits, loss
+
+    def print_embeddings(self):
+        for i, row in enumerate(self.token_embedding_table.weight.detach()):
+            print(f"{i}: {row}")
 
     def generate(self, idcs: torch.Tensor, max_new_tokens: int) -> torch.Tensor:
         """Autoregressive loop

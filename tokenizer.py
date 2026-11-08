@@ -18,3 +18,17 @@ class Tokenizer:
 
     def extract_vocab(self, text: str) -> list[str]:
         return sorted(set(text), reverse=True)
+
+
+def main():
+    with open("input.txt", "r", encoding="utf-8") as f:
+        text = f.read()
+    tokenizer = Tokenizer(text)
+    print(f"Decoded sample: {text[:82]!r}")
+    # print(f"Encoded sample: {str(tokenizer.encode(text[:82])).replace(' ', '')}")
+    encoded = tokenizer.encode(text[:82])
+    print(f"Encoded sample: [{','.join(f'{i:02d}' for i in encoded)}]")
+
+
+if __name__ == "__main__":
+    main()
