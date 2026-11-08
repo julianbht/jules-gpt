@@ -53,12 +53,37 @@ def train():
     print(f"  Logits shape: {logits.shape}")
     print(f"  Loss: {loss}")
 
+    start = torch.zeros(
+        size=(1, 1), dtype=torch.long
+    )  # need to make this a 64, because for us 64 is \n
+    tokens = m.generate(idcs=start, max_new_tokens=100)[0]
+    print(tokenizer.decode(tokens.tolist()))
+
+    # -- try to do an actual training loop --
+    optimizer = torch.optim.AdamW(m.parameters(), lr=1e-3)
+    batch_size = 32
+    for steps in range(10000):
+        xb, xy = get_batch(
+            data=train_data, batch_size=batch_size, block_size=block_size
+        )
+        logits, loss = m(xb, xy)
+        optimizer.zero_grad(set_to_none=True)
+        loss.backward()
+        optimizer.step()
+        # print(loss.item())
+
+    start = torch.zeros(
+        size=(1, 1), dtype=torch.long
+    )  # need to make this a 64, because for us 64 is \n
+    tokens = m.generate(idcs=start, max_new_tokens=1000)[0]
+    print(tokenizer.decode(tokens.tolist()))
+
 
 def get_batch(
     data: torch.Tensor, block_size: int, batch_size: int
 ) -> tuple[torch.Tensor, torch.Tensor]:
     ix = torch.randint(low=0, high=len(data) - block_size, size=(batch_size,))
-    print(f"Starting indeces for current batch: {ix}")
+    # print(f"Starting indeces for current batch: {ix}")
     x = torch.stack([data[i : i + block_size] for i in ix])
     y = torch.stack([data[i + 1 : i + block_size + 1] for i in ix])
     return x, y
@@ -74,26 +99,45 @@ class BigramLM(nn.Module):
         self.token_embedding_table = nn.Embedding(vocab_size, vocab_size)
 
     def forward(
-        self, idcs: torch.Tensor, targets: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+        self, idcs: torch.Tensor, targets: torch.Tensor | None = None
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         # integer array indexing
         # each token is within vocab_size
         # for each token, pick out its embedding table row
         # that row is the embedding
-        # dim = block_size x batch_size x vocab_size (B,T,C)
+        # dim = batch_size x block_size x vocab_size (B,T,C)
         # for each char in each batch the logits for all possible following chars
         logits = self.token_embedding_table(idcs)
-        # compute negative log likelihood loss
-        # goal: return logits and loss
-        # isuse: pytorch expects dimensions differently
-        # so we need to juggle them around
-        B, T, C = logits.shape
-        # flatten logits and targets
-        logits = logits.view(B * T, C)
-        targets = targets.view(B * T)
-        # result: blocks and batches concatenated into one
-        loss = F.cross_entropy(logits, targets)
+        if targets is None:
+            loss = None
+        else:
+            # compute negative log likelihood loss
+            # goal: return logits and loss
+            # isuse: pytorch expects dimensions differently
+            B, T, C = logits.shape
+            # so we need to juggle them around
+            # flatten logits and targets
+            logits = logits.view(B * T, C)
+            targets = targets.view(B * T)
+            # result: blocks and batches concatenated into one
+            loss = F.cross_entropy(logits, targets)
         return logits, loss
+
+    def generate(self, idcs: torch.Tensor, max_new_tokens: int) -> torch.Tensor:
+        """Autoregressive loop
+        Extend the B batches of size T by a new token one at a time.
+        Continually generate across batches in the time dimension.
+        From (B,T) to (B,T+1), then (B,T+2) and so on.
+        """
+        for _ in range(max_new_tokens):
+            # do a prediction
+            logits, _ = self(idcs)
+            # get the last token from each batch
+            logits = logits[:, -1, :]
+            probs = F.softmax(logits, dim=1)
+            idx_next = torch.multinomial(probs, num_samples=1)
+            idcs = torch.cat((idcs, idx_next), dim=1)
+        return idcs
 
 
 if __name__ == "__main__":
