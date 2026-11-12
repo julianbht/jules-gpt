@@ -11,7 +11,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 # hyperparameters
 block_size = 8  # (dim C) max context_length for prediction
 batch_size = 4  # (dim B) independent sequences to process parallelly in one pass
-max_iters = 3000  # training iterations
+max_iters = 500  # training iterations
 eval_interval = 300
 learning_rate = 1e-2
 eval_iters = 200
@@ -64,31 +64,35 @@ def train():
     print(f"  Logits shape: {logits.shape}")
     print(f"  Loss: {loss}")
 
-    # print("Example generation before train:")
-    # start = torch.zeros(
-    #     size=(1, 1), dtype=torch.long
-    # )  # need to make this a 64, because for us 64 is \n
-    # tokens = m.generate(idcs=start, max_new_tokens=100)[0]
-    # print(f"  {tokenizer.decode(tokens.tolist())!r}")
-    m.print_embeddings()
+    print("Example generation before train:")
+    start = torch.zeros(
+        size=(1, 1), dtype=torch.long
+    )  # need to make this a 64, because for us 64 is \n
+    tokens = m.generate(idcs=start, max_new_tokens=100)[0]
+    print(f"  {tokenizer.decode(tokens.tolist())!r}")
+    # m.print_embeddings()
 
     # -- try to do an actual training loop --
-    # optimizer = torch.optim.AdamW(m.parameters(), lr=learning_rate)
-    # for steps in range(max_iters):
-    #     xb, xy = get_batch(
-    #         data=train_data, batch_size=batch_size, block_size=block_size
-    #     )
-    #     logits, loss = m(xb, xy)
-    #     optimizer.zero_grad(set_to_none=True)
-    #     loss.backward()
-    #     optimizer.step()
-    #     # print(loss.item())
+    optimizer = torch.optim.AdamW(m.parameters(), lr=learning_rate)
+    print(f"Starting training loop with {max_iters} iterations...")
+    for steps in range(max_iters):
+        xb, xy = get_batch(
+            data=train_data, batch_size=batch_size, block_size=block_size
+        )
+        logits, loss = m(xb, xy)
+        optimizer.zero_grad(set_to_none=True)
+        loss.backward()
+        optimizer.step()
+        # print(loss.item())
 
-    # start = torch.zeros(
-    #     size=(1, 1), dtype=torch.long
-    # )  # need to make this a 64, because for us 64 is \n
-    # tokens = m.generate(idcs=start, max_new_tokens=1)[0]
-    # print(tokenizer.decode(tokens.tolist()))
+    print("Training finished.")
+
+    start = torch.zeros(
+        size=(1, 1), dtype=torch.long
+    )  # need to make this a 64, because for us 64 is \n
+    print("Generation after training: ")
+    tokens = m.generate(idcs=start, max_new_tokens=1)[0]
+    print("  " + tokenizer.decode(tokens.tolist()))
 
 
 def get_batch(
