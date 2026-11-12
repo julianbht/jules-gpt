@@ -76,10 +76,10 @@ def train():
     optimizer = torch.optim.AdamW(m.parameters(), lr=learning_rate)
     print(f"Starting training loop with {max_iters} iterations...")
     for steps in range(max_iters):
-        xb, xy = get_batch(
+        xb, yb = get_batch(
             data=train_data, batch_size=batch_size, block_size=block_size
         )
-        logits, loss = m(xb, xy)
+        logits, loss = m(xb, yb)
         optimizer.zero_grad(set_to_none=True)
         loss.backward()
         optimizer.step()
@@ -120,7 +120,7 @@ class BigramLM(nn.Module):
         # print(f"  {self.token_embedding_table.weight.detach()}")
 
     def forward(
-        self, xb: torch.Tensor, xy: torch.Tensor | None = None
+        self, xb: torch.Tensor, yb: torch.Tensor | None = None
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         # integer array indexing
         # each token is within vocab_size
@@ -130,7 +130,7 @@ class BigramLM(nn.Module):
         # for each char in each batch the logits for all possible following chars
         logits = self.token_embedding_table(xb)
         # print(f"Logits: {logits}")
-        if xy is None:
+        if yb is None:
             loss = None
         else:
             # compute negative log likelihood loss
@@ -140,9 +140,9 @@ class BigramLM(nn.Module):
             # so we need to juggle them around
             # flatten logits and targets
             logits = logits.view(B * T, C)
-            xy = xy.view(B * T)
+            yb = yb.view(B * T)
             # result: blocks and batches concatenated into one
-            loss = F.cross_entropy(logits, xy)
+            loss = F.cross_entropy(logits, yb)
         return logits, loss
 
     def print_embeddings(self):
