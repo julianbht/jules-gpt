@@ -19,12 +19,9 @@ eval_iters = 200
 
 
 def main():
-    train()
-
-
-def train():
     with open("input.txt", "r", encoding="utf-8") as f:
         text = f.read()
+
     tokenizer = Tokenizer(text)
     # encoding = tokenizer.encode(s="Hello World")
     # decoding = tokenizer.decode(encoding)
@@ -73,27 +70,33 @@ def train():
     print(f"  {tokenizer.decode(tokens.tolist())!r}")
     # m.print_embeddings()
 
-    # -- try to do an actual training loop --
+    # -- do training loop --
     optimizer = torch.optim.AdamW(m.parameters(), lr=learning_rate)
     print(f"Starting training loop with {max_iters} iterations...")
-    for steps in range(max_iters):
-        xb, yb = get_batch(
-            data=train_data, batch_size=batch_size, block_size=block_size
-        )
-        logits, loss = m(xb, yb)
-        optimizer.zero_grad(set_to_none=True)
-        loss.backward()
-        optimizer.step()
-        # print(loss.item())
-
+    train(data=train_data, model=m, max_iters=max_iters, optimizer=optimizer)
     print("Training finished.")
 
+    # -- do prediction --
     start = torch.zeros(
         size=(1, 1), dtype=torch.long
     )  # need to make this a 64, because for us 64 is \n
     print("Generation after training: ")
     tokens = m.generate(idcs=start, max_new_tokens=max_new_tokens)[0]
     print(f"  {tokenizer.decode(tokens.tolist())!r}")
+
+
+def train(
+    data: torch.Tensor,
+    model: nn.Module,
+    max_iters: int,
+    optimizer: torch.optim.Optimizer,
+) -> None:
+    for _ in range(max_iters):
+        xb, yb = get_batch(data=data, batch_size=batch_size, block_size=block_size)
+        _, loss = model(xb, yb)
+        optimizer.zero_grad(set_to_none=True)
+        loss.backward()
+        optimizer.step()
 
 
 def get_batch(
