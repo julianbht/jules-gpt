@@ -12,6 +12,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 block_size = 8  # (dim C) max context_length for prediction
 batch_size = 4  # (dim B) independent sequences to process parallelly in one pass
 max_iters = 500  # training iterations
+max_new_tokens = 200
 eval_interval = 300
 learning_rate = 1e-2
 eval_iters = 200
@@ -91,8 +92,8 @@ def train():
         size=(1, 1), dtype=torch.long
     )  # need to make this a 64, because for us 64 is \n
     print("Generation after training: ")
-    tokens = m.generate(idcs=start, max_new_tokens=1)[0]
-    print("  " + tokenizer.decode(tokens.tolist()))
+    tokens = m.generate(idcs=start, max_new_tokens=max_new_tokens)[0]
+    print(f"  {tokenizer.decode(tokens.tolist())!r}")
 
 
 def get_batch(
