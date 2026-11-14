@@ -9,10 +9,10 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 # torch.set_printoptions(profile="full", linewidth=150)  # type: ignore
 
 # hyperparameters
-block_size = 8  # (dim C) max context_length for prediction
+block_size = 8  # (dim T) max context_length for prediction
 batch_size = 4  # (dim B) independent sequences to process parallelly in one pass
 max_iters = 500  # training iterations
-max_new_tokens = 200
+max_new_tokens = 200  # how many tokens to predict in one generation loop
 eval_interval = 300
 learning_rate = 1e-2
 eval_iters = 200
@@ -95,8 +95,8 @@ def train(
         xb, yb = get_batch(data=data, batch_size=batch_size, block_size=block_size)
         _, loss = model(xb, yb)
         optimizer.zero_grad(set_to_none=True)  # reset gradients
-        loss.backward()  # adjust weights
-        optimizer.step()
+        loss.backward()  # compute gradients
+        optimizer.step()  # adjust weights using gradients
 
 
 def get_batch(
