@@ -40,7 +40,9 @@ class BigramLM(nn.Module):
         # print("Embedding table:")
         # print(f"  {self.token_embedding_table}")
         # print(f"  {self.token_embedding_table.weight.detach()}")
-        self.lm_head = nn.Linear(config.n_embd, config.vocab_size)
+        self.lm_head = nn.Linear(
+            in_features=config.n_embd, out_features=config.vocab_size
+        )
 
     def forward(
         self, xb: torch.Tensor, yb: torch.Tensor | None = None
@@ -51,7 +53,8 @@ class BigramLM(nn.Module):
         # that row is the embedding
         # dim = batch_size x block_size x vocab_size (B,T,C)
         # for each char in each batch the logits for all possible following chars
-        logits = self.token_embedding_table(xb)
+        tok_embd = self.token_embedding_table(xb)  # (B,T,n_embd)
+        logits = self.lm_head(tok_embd)  # (B,T,vocab_size)
         # print(f"Logits: {logits}")
         if yb is None:
             loss = None
