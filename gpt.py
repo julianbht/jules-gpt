@@ -10,21 +10,21 @@ torch.manual_seed(1337)  # type: ignore
 device = "cuda" if torch.cuda.is_available() else "cpu"
 # torch.set_printoptions(profile="full", linewidth=150)  # type: ignore
 
-# hyperparameters
-block_size = 8  # (dim T) max context_length for prediction
-batch_size = 4  # (dim B) independent sequences to process parallelly in one pass
-max_iters = 10000  # training iterations
-max_new_tokens = 200  # how many tokens to predict in one generation loop
-eval_interval = 300
-learning_rate = 1e-2
-eval_iters = 200
-n_embd = 32  # (dim C) size of a token embedding
-
 
 @dataclass(frozen=True)
 class ModelConfig:
     vocab_size: int  # comes from the tokenizer at runtime
-    n_embd: int
+    block_size: int  # (dim T) max context_length for prediction
+    n_embd: int  # (dim C) size of a token embedding
+
+
+@dataclass(frozen=True)
+class TrainConfig:
+    batch_size: int  # (dim B) independent sequences to process parallelly in one pass
+    max_iters: int  # training iterations
+    learning_rate: float
+    eval_interval: int  # print the loss every eval_interval iterations
+    eval_iters: int
 
 
 class BigramLM(nn.Module):
@@ -90,10 +90,19 @@ class BigramLM(nn.Module):
 
 
 def main():
+    train_config = TrainConfig(
+        batch_size=4,
+        max_iters=10000,
+        learning_rate=1e-2,
+        eval_interval=300,
+        eval_iters=200,
+    )
+
     with open("input.txt", "r", encoding="utf-8") as f:
         text = f.read()
 
     tokenizer = Tokenizer(text)
+    model_config = ModelConfig(vocab_size=len(tokenizer.vocab), block_size=8, n_embd=32)
     # encoding = tokenizer.encode(s="Hello World")
     # decoding = tokenizer.decode(encoding)
     # print(f"Encoded 'Hello World': {encoding}")
@@ -110,10 +119,14 @@ def main():
     print(f"  Test: 1 - {len(train_data):_}")
     print(f"  Val: {len(train_data) + 1:_} - {len(data):_}")
 
-    x = train_data[:block_size]
-    y = train_data[1 : block_size + 1]  # offset by one
+    x = train_data[: model_config.block_size]
+    y = train_data[1 : model_config.block_size + 1]  # offset by one
 
-    xb, yb = get_batch(train_data, block_size=block_size, batch_size=batch_size)
+    xb, yb = get_batch(
+        train_data,
+        block_size=model_config.block_size,
+        batch_size=train_config.batch_size,
+    )
     print("Example input:")
     print(f"  {xb.size()}")
     print(f"  {xb}")
@@ -127,8 +140,7 @@ def main():
     # for row in yb.tolist():
     #     print(f"  {tokenizer.decode(row)!r}")
 
-    config = ModelConfig(vocab_size=len(tokenizer.vocab), n_embd=n_embd)
-    m = BigramLM(config)
+    m = BigramLM(model_config)
     logits, loss = m(xb, yb)  # calls m.forward()
     print("Bigram Model:")
     print(f"  Logits shape: {logits.shape}")
@@ -143,9 +155,15 @@ def main():
     # m.print_embeddings()
 
     # -- do training loop --
-    optimizer = torch.optim.AdamW(m.parameters(), lr=learning_rate)
-    print(f"Starting training loop with {max_iters} iterations...")
-    train(data=train_data, model=m, max_iters=max_iters, optimizer=optimizer)
+    optimizer = torch.optim.AdamW(m.parameters(), lr=train_config.learning_rate)
+    print(f"Starting training loop with {train_config.max_iters} iterations...")
+    train(
+        data=train_data,
+        model=m,
+        optimizer=optimizer,
+        config=train_config,
+        block_size=model_config.block_size,
+    )
     print("Training finished.")
 
     # -- do prediction --
@@ -153,20 +171,23 @@ def main():
         size=(1, 1), dtype=torch.long
     )  # need to make this a 64, because for us 64 is \n
     print("Generation after training: ")
-    tokens = m.generate(idcs=start, max_new_tokens=max_new_tokens)[0]
+    tokens = m.generate(idcs=start, max_new_tokens=200)[0]
     print(f"  {tokenizer.decode(tokens.tolist())!r}")
 
 
 def train(
     data: torch.Tensor,
     model: nn.Module,
-    max_iters: int,
     optimizer: torch.optim.Optimizer,
+    config: TrainConfig,
+    block_size: int,
 ) -> None:
-    for i in range(max_iters):
-        xb, yb = get_batch(data=data, batch_size=batch_size, block_size=block_size)
+    for i in range(config.max_iters):
+        xb, yb = get_batch(
+            data=data, block_size=block_size, batch_size=config.batch_size
+        )
         _, loss = model(xb, yb)
-        if i % 500 == 0:
+        if i % config.eval_interval == 0:
             print(f"Loss:  {loss}")
         optimizer.zero_grad(set_to_none=True)  # reset gradients
         loss.backward()  # compute gradients
