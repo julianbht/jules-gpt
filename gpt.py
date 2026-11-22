@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -16,21 +18,29 @@ max_new_tokens = 200  # how many tokens to predict in one generation loop
 eval_interval = 300
 learning_rate = 1e-2
 eval_iters = 200
+n_embd = 32  # (dim C) size of a token embedding
+
+
+@dataclass(frozen=True)
+class ModelConfig:
+    vocab_size: int  # comes from the tokenizer at runtime
+    n_embd: int
 
 
 class BigramLM(nn.Module):
-    def __init__(self, vocab_size: int):
+    def __init__(self, config: ModelConfig):
         super().__init__()
         # lookup table of embeddings
         # dim = vocab_size x vocab_size
         # row i is the embedding of token i. it has vocab_size numbers
         # one entry i,j represents how likely token j follows token i
         self.token_embedding_table: torch.nn.Embedding = nn.Embedding(
-            vocab_size, vocab_size
+            num_embeddings=config.vocab_size, embedding_dim=config.n_embd
         )
         # print("Embedding table:")
         # print(f"  {self.token_embedding_table}")
         # print(f"  {self.token_embedding_table.weight.detach()}")
+        self.lm_head = nn.Linear(config.n_embd, config.vocab_size)
 
     def forward(
         self, xb: torch.Tensor, yb: torch.Tensor | None = None
@@ -117,7 +127,8 @@ def main():
     # for row in yb.tolist():
     #     print(f"  {tokenizer.decode(row)!r}")
 
-    m = BigramLM(len(tokenizer.vocab))
+    config = ModelConfig(vocab_size=len(tokenizer.vocab), n_embd=n_embd)
+    m = BigramLM(config)
     logits, loss = m(xb, yb)  # calls m.forward()
     print("Bigram Model:")
     print(f"  Logits shape: {logits.shape}")
