@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+from torch.nn import functional as F
 
 from bigram import BigramLM
 from tokenizer import Tokenizer
@@ -52,6 +53,12 @@ wei = wei / wei.sum(1, keepdim=True)
 print(wei)
 # batched matrix multiply
 xbow2 = wei @ x  # (T,T) @ (B,T,C) --> (B,T,T) @ (B,T,C) = (B,T,C)
+
+tril = torch.tril(torch.ones(T, T))
+wei = torch.zeros((T, T))
+wei = wei.masked_fill(tril == 0, float("-inf"))
+wei = F.softmax(wei, dim=1)
+xbow = wei @ x
 
 
 def main():
