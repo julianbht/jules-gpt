@@ -13,7 +13,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 
 @dataclass(frozen=True)
 class ModelConfig:
-    vocab_size: int  # comes from the tokenizer at runtime
+    vocab_size: int  # (dim V) comes from the tokenizer at runtime
     block_size: int  # (dim T) max context_length for prediction
     n_embd: int  # (dim C) size of a token embedding
 
@@ -30,19 +30,15 @@ class TrainConfig:
 class BigramLM(nn.Module):
     def __init__(self, config: ModelConfig):
         super().__init__()
-        # lookup table of embeddings
-        # dim = vocab_size x vocab_size
-        # row i is the embedding of token i. it has vocab_size numbers
-        # one entry i,j represents how likely token j follows token i
         self.token_embedding_table: torch.nn.Embedding = nn.Embedding(
             num_embeddings=config.vocab_size, embedding_dim=config.n_embd
-        )
+        )  # (V, C)
         # print("Embedding table:")
         # print(f"  {self.token_embedding_table}")
         # print(f"  {self.token_embedding_table.weight.detach()}")
         self.lm_head = nn.Linear(
             in_features=config.n_embd, out_features=config.vocab_size
-        )
+        )  # weight (V, C), maps C to V
 
     def forward(
         self, xb: torch.Tensor, yb: torch.Tensor | None = None
@@ -51,10 +47,9 @@ class BigramLM(nn.Module):
         # each token is within vocab_size
         # for each token, pick out its embedding table row
         # that row is the embedding
-        # dim = batch_size x block_size x vocab_size (B,T,C)
+        tok_embd = self.token_embedding_table(xb)  # (B,T,C)
         # for each char in each batch the logits for all possible following chars
-        tok_embd = self.token_embedding_table(xb)  # (B,T,n_embd)
-        logits = self.lm_head(tok_embd)  # (B,T,vocab_size)
+        logits = self.lm_head(tok_embd)  # (B,T,V)
         # print(f"Logits: {logits}")
         if yb is None:
             loss = None
@@ -62,10 +57,10 @@ class BigramLM(nn.Module):
             # compute negative log likelihood loss
             # goal: return logits and loss
             # isuse: pytorch expects dimensions differently
-            B, T, C = logits.shape
+            B, T, V = logits.shape
             # so we need to juggle them around
             # flatten logits and targets
-            logits = logits.view(B * T, C)
+            logits = logits.view(B * T, V)
             yb = yb.view(B * T)
             # result: blocks and batches concatenated into one
             loss = F.cross_entropy(logits, yb)

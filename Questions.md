@@ -1,0 +1,2 @@
+- in BMI in the project module, we recorded the presentations, could be interesting bc part of the module is supposed to be about improving the presentation style
+- 
