@@ -36,6 +36,9 @@ class BigramLM(nn.Module):
         # print("Embedding table:")
         # print(f"  {self.token_embedding_table}")
         # print(f"  {self.token_embedding_table.weight.detach()}")
+        self.position_embedding_table = nn.Embedding(
+            num_embeddings=config.block_size, embedding_dim=config.n_embd
+        )  # (T,C)
         self.lm_head = nn.Linear(
             in_features=config.n_embd, out_features=config.vocab_size
         )  # weight (V, C), maps C to V
@@ -43,13 +46,15 @@ class BigramLM(nn.Module):
     def forward(
         self, xb: torch.Tensor, yb: torch.Tensor | None = None
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        B, T = xb.shape
+
         # integer array indexing
-        # each token is within vocab_size
-        # for each token, pick out its embedding table row
-        # that row is the embedding
         tok_embd = self.token_embedding_table(xb)  # (B,T,C)
-        # for each char in each batch the logits for all possible following chars
-        logits = self.lm_head(tok_embd)  # (B,T,V)
+        pos_embd = self.position_embedding_table(torch.arange(T, device=device))  # T, C
+        x = tok_embd + pos_embd  # (B,T,C) + (T,C) = (B,T,C)
+        # now x holds not just the token identities (the token embeddings)
+        # but also the positions at which they occur
+        logits = self.lm_head(x)  # (B,T,V)
         # print(f"Logits: {logits}")
         if yb is None:
             loss = None
