@@ -75,17 +75,18 @@ v = value(x)  # (B, T, hs)
 
 # dot product all keys and all queries of the entire
 # batch at the same time
-wei = q @ k.transpose(-2, -1)  # (B, T, hs) @ (B, hs, T) ---> (B, T, T)
+scores = q @ k.transpose(-2, -1)  # (B, T, hs) @ (B, hs, T) ---> (B, T, T)
 
 # Use lower triangular to "hide (mask) the future"
 tril = torch.tril(torch.ones(T, T))
-wei = wei.masked_fill(tril == 0, float("-inf"))
+scores = scores.masked_fill(tril == 0, float("-inf"))
 
-# at this point, wei represents the affinities between the tokens
+# at this point, scores represent the affinities between the tokens
 # use softmax to turn them into probability weights
 # (which are usually called attention weights)
-wei = F.softmax(wei, dim=-1)
+weights = F.softmax(scores, dim=-1)
 
-# finally use the attention weights to mix the value vectors
-out = wei @ v  # (B, T, T) @ (B, T, hs) ---> (B, T, hs)
+# finally use the attention weights we worked hard to acquire
+# weigh each v with it
+out = weights @ v  # (B, T, T) @ (B, T, hs) ---> (B, T, hs)
 print(out.shape)
