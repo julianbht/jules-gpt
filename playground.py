@@ -53,25 +53,39 @@ print(torch.allclose(xbow, xbow3, atol=1e-6))
 # Trying out attention
 # ------
 
-# self-attention!
+# single head of masked (causal) self attention
 
 torch.manual_seed(1337)  # type: ignore
-B, T, C = 4, 8, 32  # type: ignore
+B, T, C = 4, 6, 3  # type: ignore
+# x holds random token embedding vectors
 x = torch.randn(B, T, C)
 
-# let's see a single Head perform self-attention
-head_size = 16
+# create linear layers
+# initializes the weight matrices with random weights
+# input: vectors of size C. output: vectors of size head_size.
+head_size = 2
 key = nn.Linear(C, head_size, bias=False)
 query = nn.Linear(C, head_size, bias=False)
 value = nn.Linear(C, head_size, bias=False)
-k = key(x)  # (B, T, 16)
-q = query(x)  # (B, T, 16)
-wei = q @ k.transpose(-2, -1)  # (B, T, 16) @ (B, 16, T) ---> (B, T, T)
 
+# create key and query vector for all embeddings in the batch
+k = key(x)  # (B, T, hs) (hs = head_size)
+q = query(x)  # (B, T, hs)
+v = value(x)  # (B, T, hs)
+
+# dot product all keys and all queries of the entire
+# batch at the same time
+wei = q @ k.transpose(-2, -1)  # (B, T, hs) @ (B, hs, T) ---> (B, T, T)
+
+# Use lower triangular to "hide (mask) the future"
 tril = torch.tril(torch.ones(T, T))
 wei = wei.masked_fill(tril == 0, float("-inf"))
+
+# at this point, wei represents the affinities between the tokens
+# use softmax to turn them into probability weights
+# (which are usually called attention weights)
 wei = F.softmax(wei, dim=-1)
 
-v = value(x)  # (B, T, 16)
-out = wei @ v  # (B, T, T) @ (B, T, 16) ---> (B, T, 16)
+# finally use the attention weights to mix the value vectors
+out = wei @ v  # (B, T, T) @ (B, T, hs) ---> (B, T, hs)
 print(out.shape)
