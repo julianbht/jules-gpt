@@ -68,9 +68,9 @@ key = nn.Linear(C, head_size, bias=False)
 query = nn.Linear(C, head_size, bias=False)
 value = nn.Linear(C, head_size, bias=False)
 
-# create key and query vector for all embeddings in the batch
-k = key(x)  # (B, T, hs) (hs = head_size)
+# create query, key, value vector for all embeddings in the batch
 q = query(x)  # (B, T, hs)
+k = key(x)  # (B, T, hs) (hs = head_size)
 v = value(x)  # (B, T, hs)
 
 # dot product all keys and all queries of the entire

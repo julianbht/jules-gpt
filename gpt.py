@@ -27,6 +27,50 @@ class TrainConfig:
     eval_iters: int
 
 
+class Head(nn.Module):
+    """One head of masked (causal) self-attention"""
+
+    def __init__(self, config: ModelConfig, head_size: int):
+        super().__init__()
+        # input: vectors of size C. output: vectors of size head_size.
+        # "Typically, people dont use bias in these linear layers" (?)
+        self.key = nn.Linear(config.n_embd, head_size, bias=False)
+        self.query = nn.Linear(config.n_embd, head_size, bias=False)
+        self.value = nn.Linear(config.n_embd, head_size, bias=False)
+
+        # dont want to have to recreate the lower triangular for masking every use.
+        # so it gets stored in a buffer.
+        # a buffer is part of the module's state
+        # but is not a parameter, so the optimizer doesn't train it
+        self.register_buffer(
+            "tril", torch.tril(torch.ones(config.block_size, config.block_size))
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        B, T, C = x.shape
+        k = self.key(x)  # (B, T, hs)
+        q = self.query(x)  # (B, T, hs)
+        v = self.value(x)  # (B, T, hs)
+
+        # attention scores (affinities), scaled by 1/sqrt(hs)
+        # x^{-0.5} = 1/sqrt(x)
+        # (B, T, hs) @ (B, hs, T) -> (B, T, T)
+        scores = q @ k.transpose(-2, -1) * k.shape[-1] ** -0.5
+
+        # hide (mask) the future.
+        # tril is built once as TxT
+        # but T can be shorter than block_size during generation.
+        # so it has to be sliced up to T
+        scores = scores.masked_fill(self.tril[:T, :T] == 0, float("-inf"))
+
+        # attention weights
+        weights = F.softmax(scores, dim=-1)  # (B, T, T)
+
+        # each output row is a weighted average of the value vectors
+        out = weights @ v  # (B, T, T) @ (B, T, hs) -> (B, T, hs)
+        return out
+
+
 class BigramLM(nn.Module):
     def __init__(self, config: ModelConfig):
         super().__init__()
